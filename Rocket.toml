@@ -1,0 +1,2 @@
+[global.databases]
+postgres_logs = { url = "postgresql://maxroach@localhost:26257/bank" }
