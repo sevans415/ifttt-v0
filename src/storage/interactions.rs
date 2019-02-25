@@ -1,4 +1,4 @@
-use crate::resources::SleepSession;
+use crate::resources::{NbaPlayer, SleepSession};
 use postgres::error::T_R_SERIALIZATION_FAILURE;
 use postgres::transaction::Transaction;
 use postgres::{Connection, Result};
@@ -77,4 +77,11 @@ pub fn get_all_sleep_sessions(conn: &Connection) -> Result<Vec<SleepSession>> {
 
 pub fn delete_sleep_session(conn: &Connection, id: i64) -> Result<u64> {
   conn.execute("DELETE FROM sleep WHERE id = $1", &[&id])
+}
+
+pub fn add_nba_player(conn: &Connection, player: &NbaPlayer) -> Result<u64> {
+  conn.execute(
+    "INSERT INTO nba (first_name, last_name, team) VALUES ($1, $2, $3)",
+    &[&player.first_name, &player.last_name, &player.position],
+  )
 }

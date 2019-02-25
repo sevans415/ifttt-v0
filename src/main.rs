@@ -8,18 +8,34 @@ extern crate serde_derive;
 #[macro_use]
 extern crate rocket_contrib;
 extern crate chrono;
+extern crate reqwest;
 
-use postgres::{Connection, TlsMode};
+// extern crate postgres;
+extern crate r2d2;
+extern crate r2d2_postgres;
+
+use r2d2_postgres::{PostgresConnectionManager, TlsMode};
+
+// use postgres::{Connection, TlsMode};
 use rocket_contrib::databases::postgres;
 use rocket_contrib::json::Json;
 use serde_json::Value;
+use std::collections::HashMap;
+use std::sync::Mutex;
+use std::thread;
+
+use tokio::prelude::*;
+use tokio::timer::Interval;
+
+use std::time::{Duration, Instant};
 
 mod resources;
 mod storage;
 
-use self::resources::SleepSession;
+use self::resources::{NbaPlayer, SleepSession};
 use self::storage::interactions::{
-  delete_sleep_session, execute_txn, get_all_sleep_sessions, save_sleep, transfer_funds,
+  add_nba_player, delete_sleep_session, execute_txn, get_all_sleep_sessions, save_sleep,
+  transfer_funds,
 };
 
 #[database("postgres_logs")]
@@ -70,21 +86,88 @@ fn index(conn: LogsDbConn) -> &'static str {
 }
 
 fn main() {
-  let conn =
-    Connection::connect("postgresql://maxroach@localhost:26257/bank", TlsMode::None).unwrap();
+  // let conn =
+  //   Connection::connect("postgresql://maxroach@localhost:26257/bank", TlsMode::None).unwrap();
 
-  // Check account balances after the transaction.
-  for row in &conn.query("SELECT id, balance FROM accounts", &[]).unwrap() {
-    let id: i64 = row.get(0);
-    let balance: i64 = row.get(1);
-    println!("{} {}", id, balance);
+  static N_THREADS: i32 = 10;
+  let mut children = Vec::new();
+
+  for i in 0..N_THREADS {
+    children.push(thread::spawn(move || {
+      println!("This is thread {}", i);
+    }))
   }
 
-  rocket::ignite()
-    .attach(LogsDbConn::fairing())
-    .mount(
-      "/",
-      routes![index, add_sleep, get_sleep, update_sleep, delete_sleep],
-    )
-    .launch();
+  let manager =
+    PostgresConnectionManager::new("postgresql://maxroach@localhost:26257/bank", TlsMode::None)
+      .unwrap();
+  let pool = r2d2::Pool::new(manager).unwrap();
+  let tokio_pool = pool.clone();
+
+  let player_id_counter = Mutex::new(1);
+  children.push(thread::spawn(move || {
+    // build task for tokio to run once for every interval of X time
+    let conn = tokio_pool.get().unwrap();
+    let task = Interval::new(Instant::now(), Duration::new(5, 0))
+      .for_each(move |instant| {
+        let mut num = player_id_counter.lock().unwrap();
+        *num += 1;
+        let client = reqwest::Client::new();
+        let request_url = &format!("https://free-nba.p.rapidapi.com/players/{}", num);
+        let res: NbaPlayer = client
+          .get(request_url)
+          .header(
+            "X-RapidAPI-Key",
+            "ee470e72cbmshe44d34c6b9ef25bp124a54jsn423b49b2183a",
+          )
+          .send()
+          .unwrap()
+          .json()
+          .unwrap();
+
+        let db_result = add_nba_player(&conn, &res).unwrap();
+        // match db_result {
+        //   Ok(num) => println!("Successfully added {} players", num),
+        //   Err(err) => println!("ERROR saving nba player"),
+        // }
+        // let mut body = String::new();
+        // res.read_to_string(&mut body).unwrap();
+
+        println!("{:#?}", res);
+        Ok(())
+      })
+      .map_err(|e| panic!("interval errored; err={:?}", e));
+    // start tokio task
+    tokio::run(task);
+  }));
+  children.push(thread::spawn(|| {
+    // start rocket web service
+    rocket::ignite()
+      .attach(LogsDbConn::fairing())
+      .mount(
+        "/",
+        routes![index, add_sleep, get_sleep, update_sleep, delete_sleep],
+      )
+      .launch();
+  }));
+
+  for child in children {
+    let _ = child.join();
+  }
 }
+
+// fn main() {
+//   let manager =
+//     PostgresConnectionManager::new("postgres://postgres@localhost", TlsMode::None).unwrap();
+//   let pool = r2d2::Pool::new(manager).unwrap();
+
+//   for i in 0..10i32 {
+//     let pool = pool.clone();
+//     thread::spawn(move || {
+//       let conn = pool.get().unwrap();
+//       conn
+//         .execute("INSERT INTO foo (bar) VALUES ($1)", &[&i])
+//         .unwrap();
+//     });
+//   }
+// }
