@@ -98,16 +98,16 @@ fn main() {
     }))
   }
 
-  let manager =
-    PostgresConnectionManager::new("postgresql://maxroach@localhost:26257/bank", TlsMode::None)
-      .unwrap();
-  let pool = r2d2::Pool::new(manager).unwrap();
-  let tokio_pool = pool.clone();
+  // let manager =
+  //   PostgresConnectionManager::new("postgresql://maxroach@localhost:26257/bank", TlsMode::None)
+  //     .unwrap();
+  // let pool = r2d2::Pool::new(manager).unwrap();
+  // let tokio_pool = pool.clone();
 
   let player_id_counter = Mutex::new(1);
   children.push(thread::spawn(move || {
     // build task for tokio to run once for every interval of X time
-    let conn = tokio_pool.get().unwrap();
+    // let conn = tokio_pool.get().unwrap();
     let task = Interval::new(Instant::now(), Duration::new(5, 0))
       .for_each(move |instant| {
         let mut num = player_id_counter.lock().unwrap();
@@ -125,7 +125,7 @@ fn main() {
           .json()
           .unwrap();
 
-        let db_result = add_nba_player(&conn, &res).unwrap();
+        // let db_result = add_nba_player(&conn, &res).unwrap();
         // match db_result {
         //   Ok(num) => println!("Successfully added {} players", num),
         //   Err(err) => println!("ERROR saving nba player"),
