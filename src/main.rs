@@ -20,13 +20,14 @@ use r2d2_postgres::{PostgresConnectionManager, TlsMode};
 use rocket_contrib::databases::postgres;
 use rocket_contrib::json::Json;
 use serde_json::Value;
-use std::collections::HashMap;
-use std::sync::Mutex;
-use std::thread;
 
 use tokio::prelude::*;
 use tokio::timer::Interval;
 
+use std::collections::HashMap;
+use std::process::Command;
+use std::sync::Mutex;
+use std::thread;
 use std::time::{Duration, Instant};
 
 mod resources;
@@ -110,20 +111,20 @@ fn main() {
     // let conn = tokio_pool.get().unwrap();
     let task = Interval::new(Instant::now(), Duration::new(5, 0))
       .for_each(move |instant| {
-        let mut num = player_id_counter.lock().unwrap();
-        *num += 1;
-        let client = reqwest::Client::new();
-        let request_url = &format!("https://free-nba.p.rapidapi.com/players/{}", num);
-        let res: NbaPlayer = client
-          .get(request_url)
-          .header(
-            "X-RapidAPI-Key",
-            "ee470e72cbmshe44d34c6b9ef25bp124a54jsn423b49b2183a",
-          )
-          .send()
-          .unwrap()
-          .json()
-          .unwrap();
+        // let mut num = player_id_counter.lock().unwrap();
+        // *num += 1;
+        // let client = reqwest::Client::new();
+        // let request_url = &format!("https://free-nba.p.rapidapi.com/players/{}", num);
+        // let res: NbaPlayer = client
+        //   .get(request_url)
+        //   .header(
+        //     "X-RapidAPI-Key",
+        //     "ee470e72cbmshe44d34c6b9ef25bp124a54jsn423b49b2183a",
+        //   )
+        //   .send()
+        //   .unwrap()
+        //   .json()
+        //   .unwrap();
 
         // let db_result = add_nba_player(&conn, &res).unwrap();
         // match db_result {
@@ -133,7 +134,20 @@ fn main() {
         // let mut body = String::new();
         // res.read_to_string(&mut body).unwrap();
 
-        println!("{:#?}", res);
+        // println!("{:#?}", res);
+
+        /* Call python script*/
+
+        let output = Command::new("python")
+          .arg("hello.py")
+          // .arg("-l")
+          // .arg("-a")
+          .spawn()
+          .expect("ls command failed to start");
+
+        let hello = output.stdout;
+        println!("std out::::: {:?}", hello);
+
         Ok(())
       })
       .map_err(|e| panic!("interval errored; err={:?}", e));
